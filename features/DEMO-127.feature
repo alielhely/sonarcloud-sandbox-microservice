@@ -22,5 +22,5 @@ Feature: User Login Feature
     Given the user is on the login page
     When the user does not enter a username or password
     And the user clicks the login button
-    Then an error message is displayed indicating missing credentials
+    Then an error message is displayed
     And the login attempt is logged for security
