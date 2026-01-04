@@ -1,32 +1,3 @@
-Here's a complete implementation of a user login feature in a Spring Boot application that meets the specified requirements. This code includes a simple user entity, a login controller, a service for handling authentication, and a repository for database interaction.
-
-### Project Structure
-```
-src
-└── main
-    ├── java
-    │   └── com
-    │       └── example
-    │           ├── demo
-    │           │   ├── DemoApplication.java
-    │           │   ├── controller
-    │           │   │   └── AuthController.java
-    │           │   ├── model
-    │           │   │   └── User.java
-    │           │   ├── repository
-    │           │   │   └── UserRepository.java
-    │           │   └── service
-    │           │       └── AuthService.java
-    │           └── config
-    │               └── SecurityConfig.java
-    └── resources
-        └── application.properties
-```
-
-### Code Implementation
-
-#### 1. `DemoApplication.java`
-```java
 package com.example.demo;
 
 import org.springframework.boot.SpringApplication;
@@ -38,10 +9,7 @@ public class DemoApplication {
         SpringApplication.run(DemoApplication.class, args);
     }
 }
-```
 
-#### 2. `User.java`
-```java
 package com.example.demo.model;
 
 import jakarta.persistence.Entity;
@@ -98,10 +66,7 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByUsername(String username);
 }
-```
 
-#### 4. `AuthService.java`
-```java
 package com.example.demo.service;
 
 import com.example.demo.model.User;
@@ -129,10 +94,7 @@ public class AuthService {
         return false;
     }
 }
-```
 
-#### 5. `AuthController.java`
-```java
 package com.example.demo.controller;
 
 import com.example.demo.service.AuthService;
@@ -163,10 +125,8 @@ public class AuthController {
         }
     }
 }
-```
 
-#### 6. `SecurityConfig.java`
-```java
+
 package com.example.demo.config;
 
 import org.springframework.context.annotation.Bean;
