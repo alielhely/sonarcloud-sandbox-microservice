@@ -5,15 +5,12 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.validation.annotation.Validated;
-
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import javax.validation.Valid;
 import javax.validation.constraints.Email;
 import javax.validation.constraints.NotBlank;
-import javax.validation.constraints.Size;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.regex.Pattern;
 
 @SpringBootApplication
@@ -25,65 +22,121 @@ public class DemoApplication {
 
 @RestController
 @RequestMapping("/api/register")
-@Validated
 class RegistrationController {
 
     @Autowired
-    private UserService userService;
+    private UserRepository userRepository;
+
+    @Autowired
+    private BCryptPasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JavaMailSender mailSender;
+
+    private static final String EMAIL_REGEX = "^[A-Za-z0-9+_.-]+@(.+)$";
+    private static final Pattern EMAIL_PATTERN = Pattern.compile(EMAIL_REGEX);
+    private static final String WEAK_PASSWORD_REGEX = "^.{0,7}$";
+    private static final Pattern WEAK_PASSWORD_PATTERN = Pattern.compile(WEAK_PASSWORD_REGEX);
 
     @PostMapping
-    public ResponseEntity<?> registerUser(@RequestBody @Validated UserRegistrationRequest request) {
-        if (!isValidEmail(request.getEmail())) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid email address");
+    public ResponseEntity<String> registerUser(@Valid @RequestBody UserRegistrationRequest request) {
+        if (!EMAIL_PATTERN.matcher(request.getEmail()).matches()) {
+            return ResponseEntity.badRequest().body("Invalid email format");
         }
 
-        if (!request.getPassword().equals(request.getConfirmPassword())) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Password mismatch");
+        if (WEAK_PASSWORD_PATTERN.matcher(request.getPassword()).matches()) {
+            return ResponseEntity.badRequest().body("Password is too weak");
         }
 
-        if (userService.isEmailRegistered(request.getEmail())) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Email already registered");
+        if (userRepository.existsByEmail(request.getEmail())) {
+            return ResponseEntity.badRequest().body("Email is already registered");
         }
 
-        userService.registerUser(request.getEmail(), request.getPassword());
-        return ResponseEntity.ok("Registration successful");
+        String encryptedPassword = passwordEncoder.encode(request.getPassword());
+        User user = new User(request.getEmail(), encryptedPassword);
+        userRepository.save(user);
+
+        sendConfirmationEmail(request.getEmail());
+
+        return ResponseEntity.ok("User registered successfully");
     }
 
-    private boolean isValidEmail(String email) {
-        String emailRegex = "^[A-Za-z0-9+_.-]+@(.+)$";
-        Pattern pattern = Pattern.compile(emailRegex);
-        return pattern.matcher(email).matches();
+    private void sendConfirmationEmail(String email) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(email);
+        message.setSubject("Registration Confirmation");
+        message.setText("Thank you for registering!");
+        mailSender.send(message);
     }
 }
 
 class UserRegistrationRequest {
+    @Email
+    @NotBlank
+    private String email;
+
+    @NotBlank
+    private String password;
+
+    // Getters and Setters
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+}
+
+@Entity
+class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     @Email
     @NotBlank
     private String email;
 
     @NotBlank
-    @Size(min = 6, message = "Password should have at least 6 characters")
     private String password;
 
-    @NotBlank
-    private String confirmPassword;
-
-    // Getters and Setters
-}
-
-@Service
-class UserService {
-
-    private Map<String, String> userDatabase = new HashMap<>();
-    private BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
-
-    public boolean isEmailRegistered(String email) {
-        return userDatabase.containsKey(email);
+    public User(String email, String password) {
+        this.email = email;
+        this.password = password;
     }
 
-    public void registerUser(String email, String password) {
-        String encryptedPassword = passwordEncoder.encode(password);
-        userDatabase.put(email, encryptedPassword);
+    // Getters and Setters
+    public Long getId() {
+        return id;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+}
+
+interface UserRepository extends JpaRepository<User, Long> {
+    boolean existsByEmail(String email);
+}
+
+@Configuration
+class SecurityConfig {
+
+    @Bean
+    public BCryptPasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 }
