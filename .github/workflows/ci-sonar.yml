@@ -35,37 +35,6 @@ jobs:
         id: build
         run: mvn clean verify -B 2>&1 | tee build.log
 
-      - name: Extract Build Errors
-        id: extract_errors
-        if: always()
-        run: |
-          # Check if build actually succeeded
-          if [ ${{ steps.build.outcome }} == "success" ] && [ ${{ steps.sonar.outcome }} == "success" ]; then
-            echo "conclusion=success" >> $GITHUB_OUTPUT
-          else
-            echo "conclusion=failure" >> $GITHUB_OUTPUT
-          fi
-
-          # Extract errors regardless
-          if [ -f build.log ]; then
-            BUILD_ERRORS=$(grep -A 5 "COMPILATION ERROR" build.log || grep -A 5 "\[ERROR\]" build.log | head -50 || echo "Build failed")
-          else
-            BUILD_ERRORS="Build log not found"
-          fi
-
-          echo "$BUILD_ERRORS" > build_errors.txt
-
-          # Get SonarCloud issues
-          SONAR_ISSUES="No SonarCloud data"
-          if [ "${{ steps.sonar.outcome }}" == "success" ]; then
-            SONAR_ISSUES=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-              "https://sonarcloud.io/api/issues/search?componentKeys=${{ secrets.SONAR_PROJECT_KEY }}&resolved=false&s=FILE_LINE&ps=10" \
-              | jq -r '.issues[] | "[\(.severity)] \(.message) at \(.component):\(.line)"' \
-              | head -20 || echo "Could not fetch SonarCloud issues")
-          fi
-
-          echo "$SONAR_ISSUES" > sonar_issues.txt
-
       - name: Run SonarCloud Analysis
         id: sonar
         env:
