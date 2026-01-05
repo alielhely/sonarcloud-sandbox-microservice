@@ -3,15 +3,14 @@ package com.example.demo;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
-import org.springframework.validation.BindingResult;
+import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import javax.validation.Valid;
-import javax.validation.constraints.Email;
-import javax.validation.constraints.NotEmpty;
-import javax.validation.constraints.Size;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Pattern;
 
 @SpringBootApplication
 public class DemoApplication {
@@ -20,76 +19,91 @@ public class DemoApplication {
     }
 }
 
-@Controller
-@RequestMapping("/register")
+@RestController
+@RequestMapping("/api/register")
 class RegistrationController {
 
     @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private BCryptPasswordEncoder passwordEncoder;
-
-    @GetMapping
-    public String showRegistrationForm(Model model) {
-        model.addAttribute("user", new User());
-        return "registration";
-    }
+    private UserService userService;
 
     @PostMapping
-    public String registerUser(@Valid @ModelAttribute("user") User user, BindingResult result, Model model) {
-        if (result.hasErrors()) {
-            return "registration";
+    public Map<String, String> registerUser(@RequestBody UserRegistrationRequest request) {
+        Map<String, String> response = new HashMap<>();
+        
+        if (!isValidEmail(request.getEmail())) {
+            response.put("error", "Invalid email address");
+            return response;
         }
-        if (!user.getPassword().equals(user.getConfirmPassword())) {
-            model.addAttribute("passwordError", "Passwords do not match");
-            return "registration";
+        
+        if (!request.getPassword().equals(request.getConfirmPassword())) {
+            response.put("error", "Password mismatch");
+            return response;
         }
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
-        userRepository.save(user);
-        model.addAttribute("successMessage", "Registration successful");
-        return "registration";
+        
+        if (userService.isEmailRegistered(request.getEmail())) {
+            response.put("error", "Email already registered");
+            return response;
+        }
+        
+        userService.registerUser(request.getEmail(), request.getPassword());
+        response.put("message", "User registered successfully. Confirmation email sent.");
+        return response;
+    }
+
+    private boolean isValidEmail(String email) {
+        String emailRegex = "^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$";
+        return Pattern.compile(emailRegex).matcher(email).matches();
     }
 }
 
-@Entity
-class User {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+@Service
+class UserService {
 
-    @Email(message = "Invalid email address")
-    @NotEmpty(message = "Email is required")
+    private final Map<String, String> userDatabase = new HashMap<>();
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    public boolean isEmailRegistered(String email) {
+        return userDatabase.containsKey(email);
+    }
+
+    public void registerUser(String email, String password) {
+        String encryptedPassword = passwordEncoder.encode(password);
+        userDatabase.put(email, encryptedPassword);
+        sendConfirmationEmail(email);
+    }
+
+    private void sendConfirmationEmail(String email) {
+        // Simulate sending an email
+        System.out.println("Confirmation email sent to " + email);
+    }
+}
+
+class UserRegistrationRequest {
     private String email;
-
-    @Size(min = 6, message = "Password must be at least 6 characters")
     private String password;
-
-    @Transient
     private String confirmPassword;
 
-    // Getters and Setters
-}
-
-interface UserRepository extends JpaRepository<User, Long> {
-}
-
-@Configuration
-class SecurityConfig extends WebSecurityConfigurerAdapter {
-
-    @Bean
-    public BCryptPasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+    public String getEmail() {
+        return email;
     }
 
-    @Override
-    protected void configure(HttpSecurity http) throws Exception {
-        http.authorizeRequests()
-            .antMatchers("/register").permitAll()
-            .anyRequest().authenticated()
-            .and()
-            .formLogin().permitAll()
-            .and()
-            .logout().permitAll();
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public String getConfirmPassword() {
+        return confirmPassword;
+    }
+
+    public void setConfirmPassword(String confirmPassword) {
+        this.confirmPassword = confirmPassword;
     }
 }
