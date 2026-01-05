@@ -2,20 +2,28 @@ package com.example.demo;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.stereotype.Service;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.*;
 
+import javax.validation.Valid;
+import javax.validation.constraints.Email;
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.Size;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 @SpringBootApplication
 public class DemoApplication {
+
     public static void main(String[] args) {
         SpringApplication.run(DemoApplication.class, args);
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 }
 
@@ -23,87 +31,89 @@ public class DemoApplication {
 @RequestMapping("/api/register")
 class RegistrationController {
 
-    @Autowired
-    private UserService userService;
+    private final UserService userService;
+
+    public RegistrationController(UserService userService) {
+        this.userService = userService;
+    }
 
     @PostMapping
-    public Map<String, String> registerUser(@RequestBody UserRegistrationRequest request) {
+    public Map<String, String> registerUser(@Valid @RequestBody UserRegistrationRequest request) {
         Map<String, String> response = new HashMap<>();
-        
-        if (!isValidEmail(request.getEmail())) {
-            response.put("error", "Invalid email address");
-            return response;
-        }
-        
+
         if (!request.getPassword().equals(request.getConfirmPassword())) {
-            response.put("error", "Password mismatch");
+            response.put("message", "Password mismatch");
             return response;
         }
-        
-        if (userService.isEmailRegistered(request.getEmail())) {
-            response.put("error", "Email already registered");
+
+        if (userService.existsByEmail(request.getEmail())) {
+            response.put("message", "Duplicate email");
             return response;
         }
-        
-        userService.registerUser(request.getEmail(), request.getPassword());
-        response.put("message", "User registered successfully. Confirmation email sent.");
+
+        userService.registerUser(request);
+        response.put("message", "User registered successfully");
         return response;
     }
+}
 
-    private boolean isValidEmail(String email) {
-        String emailRegex = "^[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$";
-        return Pattern.compile(emailRegex).matcher(email).matches();
-    }
+class UserRegistrationRequest {
+
+    @Email(message = "Invalid email address")
+    @NotBlank(message = "Email is mandatory")
+    private String email;
+
+    @Size(min = 6, message = "Password must be at least 6 characters")
+    private String password;
+
+    @NotBlank(message = "Confirm password is mandatory")
+    private String confirmPassword;
+
+    // Getters and Setters
 }
 
 @Service
 class UserService {
 
-    private final Map<String, String> userDatabase = new HashMap<>();
-    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    public boolean isEmailRegistered(String email) {
-        return userDatabase.containsKey(email);
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
-    public void registerUser(String email, String password) {
-        String encryptedPassword = passwordEncoder.encode(password);
-        userDatabase.put(email, encryptedPassword);
-        sendConfirmationEmail(email);
+    public void registerUser(UserRegistrationRequest request) {
+        User user = new User();
+        user.setEmail(request.getEmail());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        userRepository.save(user);
+        // Send confirmation email logic here
     }
 
-    private void sendConfirmationEmail(String email) {
-        // Simulate sending an email
-        System.out.println("Confirmation email sent to " + email);
+    public boolean existsByEmail(String email) {
+        return userRepository.existsByEmail(email);
     }
 }
 
-class UserRegistrationRequest {
+@Entity
+class User {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Email
+    @NotBlank
     private String email;
+
+    @NotBlank
     private String password;
-    private String confirmPassword;
 
-    public String getEmail() {
-        return email;
-    }
+    // Getters and Setters
+}
 
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
-
-    public String getConfirmPassword() {
-        return confirmPassword;
-    }
-
-    public void setConfirmPassword(String confirmPassword) {
-        this.confirmPassword = confirmPassword;
-    }
+@Repository
+interface UserRepository extends JpaRepository<User, Long> {
+    boolean existsByEmail(String email);
 }
