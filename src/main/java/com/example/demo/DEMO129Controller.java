@@ -7,14 +7,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.validation.annotation.Validated;
 
-import javax.validation.Valid;
 import javax.validation.constraints.Email;
 import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.Size;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 @SpringBootApplication
 public class DemoApplication {
@@ -25,47 +25,48 @@ public class DemoApplication {
 
 @RestController
 @RequestMapping("/api/register")
+@Validated
 class RegistrationController {
 
     @Autowired
     private UserService userService;
 
-    @Autowired
-    private JavaMailSender mailSender;
-
     @PostMapping
-    public ResponseEntity<String> registerUser(@Valid @RequestBody UserRegistrationRequest request) {
+    public ResponseEntity<?> registerUser(@RequestBody @Validated UserRegistrationRequest request) {
+        if (!isValidEmail(request.getEmail())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid email address");
+        }
+
         if (!request.getPassword().equals(request.getConfirmPassword())) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Password mismatch error");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Password mismatch");
         }
 
         if (userService.isEmailRegistered(request.getEmail())) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Email already registered");
         }
 
-        userService.createUser(request);
-        sendConfirmationEmail(request.getEmail());
-        return ResponseEntity.status(HttpStatus.CREATED).body("User registered successfully");
+        userService.registerUser(request.getEmail(), request.getPassword());
+        return ResponseEntity.ok("Registration successful");
     }
 
-    private void sendConfirmationEmail(String email) {
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setTo(email);
-        message.setSubject("Registration Confirmation");
-        message.setText("Thank you for registering!");
-        mailSender.send(message);
+    private boolean isValidEmail(String email) {
+        String emailRegex = "^[A-Za-z0-9+_.-]+@(.+)$";
+        Pattern pattern = Pattern.compile(emailRegex);
+        return pattern.matcher(email).matches();
     }
 }
 
 class UserRegistrationRequest {
-    @Email(message = "Invalid email format")
-    @NotBlank(message = "Email is mandatory")
+
+    @Email
+    @NotBlank
     private String email;
 
-    @NotBlank(message = "Password is mandatory")
+    @NotBlank
+    @Size(min = 6, message = "Password should have at least 6 characters")
     private String password;
 
-    @NotBlank(message = "Confirm Password is mandatory")
+    @NotBlank
     private String confirmPassword;
 
     // Getters and Setters
@@ -81,8 +82,8 @@ class UserService {
         return userDatabase.containsKey(email);
     }
 
-    public void createUser(UserRegistrationRequest request) {
-        String encryptedPassword = passwordEncoder.encode(request.getPassword());
-        userDatabase.put(request.getEmail(), encryptedPassword);
+    public void registerUser(String email, String password) {
+        String encryptedPassword = passwordEncoder.encode(password);
+        userDatabase.put(email, encryptedPassword);
     }
 }
