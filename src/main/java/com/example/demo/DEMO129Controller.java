@@ -2,17 +2,16 @@ package com.example.demo;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.annotation.Bean;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
-
-import javax.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.validation.annotation.Validated;
 import javax.validation.constraints.Email;
 import javax.validation.constraints.NotBlank;
-import javax.validation.constraints.Size;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @SpringBootApplication
 public class DemoApplication {
@@ -20,72 +19,87 @@ public class DemoApplication {
     public static void main(String[] args) {
         SpringApplication.run(DemoApplication.class, args);
     }
-
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
 }
 
 @RestController
-@RequestMapping("/api/register")
+@RequestMapping("/register")
 class RegistrationController {
 
-    private final Map<String, String> registeredUsers = new HashMap<>();
-    private final PasswordEncoder passwordEncoder;
-
-    public RegistrationController(PasswordEncoder passwordEncoder) {
-        this.passwordEncoder = passwordEncoder;
-    }
+    @Autowired
+    private UserService userService;
 
     @PostMapping
-    public String registerUser(@Valid @RequestBody RegistrationRequest request) {
-        if (registeredUsers.containsKey(request.getEmail())) {
-            return "Error: Email already registered";
+    public String registerUser(@Validated @RequestBody UserRegistrationRequest request) {
+        if (!request.getPassword().equals(request.getConfirmPassword())) {
+            return "Error: Passwords do not match.";
         }
-        if (!isValidEmail(request.getEmail())) {
-            return "Error: Invalid email address";
-        }
-        if (!isStrongPassword(request.getPassword())) {
-            return "Error: Weak password";
-        }
-        String encryptedPassword = passwordEncoder.encode(request.getPassword());
-        registeredUsers.put(request.getEmail(), encryptedPassword);
-        return "Registration successful. Confirmation message sent.";
-    }
 
-    private boolean isValidEmail(String email) {
-        return email.contains("@");
-    }
+        Optional<User> existingUser = userService.findByEmail(request.getEmail());
+        if (existingUser.isPresent()) {
+            return "Error: Email is already registered.";
+        }
 
-    private boolean isStrongPassword(String password) {
-        return password.length() >= 8;
+        userService.registerUser(request);
+        return "Registration successful!";
     }
 }
 
-class RegistrationRequest {
+@Service
+class UserService {
 
-    @Email(message = "Invalid email format")
-    @NotBlank(message = "Email is mandatory")
+    private final Map<String, User> userDatabase = new HashMap<>();
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    public Optional<User> findByEmail(String email) {
+        return Optional.ofNullable(userDatabase.get(email));
+    }
+
+    public void registerUser(UserRegistrationRequest request) {
+        String encryptedPassword = passwordEncoder.encode(request.getPassword());
+        User user = new User(request.getEmail(), encryptedPassword);
+        userDatabase.put(user.getEmail(), user);
+    }
+}
+
+class User {
+
     private String email;
-
-    @Size(min = 8, message = "Password must be at least 8 characters long")
-    @NotBlank(message = "Password is mandatory")
     private String password;
+
+    public User(String email, String password) {
+        this.email = email;
+        this.password = password;
+    }
 
     public String getEmail() {
         return email;
     }
 
-    public void setEmail(String email) {
-        this.email = email;
+    public String getPassword() {
+        return password;
+    }
+}
+
+class UserRegistrationRequest {
+
+    @Email(message = "Invalid email address")
+    private String email;
+
+    @NotBlank(message = "Password cannot be blank")
+    private String password;
+
+    @NotBlank(message = "Confirm password cannot be blank")
+    private String confirmPassword;
+
+    public String getEmail() {
+        return email;
     }
 
     public String getPassword() {
         return password;
     }
 
-    public void setPassword(String password) {
-        this.password = password;
+    public String getConfirmPassword() {
+        return confirmPassword;
     }
 }
