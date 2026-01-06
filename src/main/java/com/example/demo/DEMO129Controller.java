@@ -4,16 +4,16 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 
 import javax.validation.Valid;
 import javax.validation.constraints.Email;
 import javax.validation.constraints.NotBlank;
-import java.util.Optional;
+import javax.validation.constraints.Size;
+import java.util.HashMap;
+import java.util.Map;
 
 @SpringBootApplication
 public class DemoApplication {
@@ -23,36 +23,39 @@ public class DemoApplication {
 }
 
 @RestController
-@RequestMapping("/api/register")
+@RequestMapping("/register")
 class RegistrationController {
 
     @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private BCryptPasswordEncoder passwordEncoder;
+    private UserService userService;
 
     @Autowired
     private JavaMailSender mailSender;
 
     @PostMapping
-    public ResponseEntity<String> registerUser(@Valid @RequestBody UserRegistrationRequest request) {
-        if (!request.getPassword().equals(request.getConfirmPassword())) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Password mismatch error");
+    public Map<String, String> registerUser(@Valid @RequestBody UserRegistrationRequest request) {
+        Map<String, String> response = new HashMap<>();
+
+        if (userService.emailExists(request.getEmail())) {
+            response.put("error", "Email already exists");
+            return response;
         }
 
-        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Email already registered");
+        if (!isValidPassword(request.getPassword())) {
+            response.put("error", "Weak password");
+            return response;
         }
 
-        User user = new User();
-        user.setEmail(request.getEmail());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
-        userRepository.save(user);
+        userService.registerUser(request);
 
-        sendConfirmationEmail(user.getEmail());
+        sendConfirmationEmail(request.getEmail());
 
-        return ResponseEntity.ok("User registered successfully");
+        response.put("message", "User registered successfully");
+        return response;
+    }
+
+    private boolean isValidPassword(String password) {
+        return password.length() >= 8;
     }
 
     private void sendConfirmationEmail(String email) {
@@ -65,51 +68,30 @@ class RegistrationController {
 }
 
 class UserRegistrationRequest {
+
     @Email(message = "Invalid email format")
-    @NotBlank(message = "Email is mandatory")
+    @NotBlank(message = "Email is required")
     private String email;
 
-    @NotBlank(message = "Password is mandatory")
-    private String password;
-
-    @NotBlank(message = "Confirm password is mandatory")
-    private String confirmPassword;
-
-    // Getters and Setters
-}
-
-@Entity
-class User {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @Email
-    @NotBlank
-    private String email;
-
-    @NotBlank
+    @NotBlank(message = "Password is required")
+    @Size(min = 8, message = "Password must be at least 8 characters long")
     private String password;
 
     // Getters and Setters
 }
 
-interface UserRepository extends JpaRepository<User, Long> {
-    Optional<User> findByEmail(String email);
-}
+@Service
+class UserService {
 
-@Configuration
-class SecurityConfig {
-    @Bean
-    public BCryptPasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+    private final Map<String, String> userDatabase = new HashMap<>();
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    public boolean emailExists(String email) {
+        return userDatabase.containsKey(email);
     }
-}
 
-@Configuration
-class MailConfig {
-    @Bean
-    public JavaMailSender javaMailSender() {
-        return new JavaMailSenderImpl();
+    public void registerUser(UserRegistrationRequest request) {
+        String encryptedPassword = passwordEncoder.encode(request.getPassword());
+        userDatabase.put(request.getEmail(), encryptedPassword);
     }
 }
