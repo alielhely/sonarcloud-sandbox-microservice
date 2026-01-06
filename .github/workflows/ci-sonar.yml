@@ -15,7 +15,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Needed for SonarCloud
+          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -34,7 +34,7 @@ jobs:
       - name: Build and Test
         id: build
         run: mvn clean verify -B 2>&1 | tee build.log
-        continue-on-error: true  # ⬅️ ADDED: Allow workflow to continue even if build fails
+        continue-on-error: true
 
       - name: Run SonarCloud Analysis
         id: sonar
@@ -54,15 +54,14 @@ jobs:
         run: |
           # Extract compilation errors from build log
           if [ -f build.log ]; then
-            BUILD_ERRORS=$(grep -A 5 "COMPILATION ERROR" build.log || grep -A 5 "\[ERROR\]" build.log | head -50 || echo "No specific build errors found")
+            BUILD_ERRORS=$(grep -A 5 "COMPILATION ERROR" build.log || grep -A 5 "\[ERROR\]" build.log | head -50 || echo "No build errors found")
           else
             BUILD_ERRORS="Build log not found"
           fi
           
-          # Save to file for webhook
           echo "$BUILD_ERRORS" > build_errors.txt
           
-          # Get SonarCloud issues via API
+          # Get SonarCloud issues
           SONAR_ISSUES="No SonarCloud data"
           if [ "${{ steps.sonar.outcome }}" == "success" ]; then
             SONAR_ISSUES=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
@@ -73,24 +72,27 @@ jobs:
           
           echo "$SONAR_ISSUES" > sonar_issues.txt
           
-          # Determine overall status - THIS IS THE KEY LOGIC
-          if [ "${{ steps.build.outcome }}" == "success" ] && [ "${{ steps.sonar.outcome }}" == "success" ]; then
-            echo "conclusion=success" >> $GITHUB_OUTPUT
+          # Determine conclusion by checking for errors in build log
+          if grep -q "COMPILATION ERROR\|BUILD FAILURE\|BUILD SUCCESS" build.log; then
+            if grep -q "BUILD SUCCESS" build.log && [ "${{ steps.sonar.outcome }}" == "success" ]; then
+              echo "conclusion=success" >> $GITHUB_OUTPUT
+              echo "✅ Build and analysis succeeded"
+            else
+              echo "conclusion=failure" >> $GITHUB_OUTPUT
+              echo "❌ Build or analysis failed"
+            fi
           else
             echo "conclusion=failure" >> $GITHUB_OUTPUT
+            echo "❌ Could not determine build status"
           fi
 
       - name: Send Webhook to n8n
         if: always()
         run: |
-          # Read error files
           BUILD_ERRORS=$(cat build_errors.txt | head -c 2000)
           SONAR_ISSUES=$(cat sonar_issues.txt | head -c 2000)
-          
-          # Extract issue key from commit message (format: [DEMO-123])
           ISSUE_KEY=$(git log -1 --pretty=%B | grep -oP '\[([A-Z]+-[0-9]+)\]' | tr -d '[]' || echo "DEMO-129")
           
-          # Send webhook
           curl -X POST "${{ secrets.N8N_WEBHOOK_URL }}" \
             -H "Content-Type: application/json" \
             -d @- <<EOF
@@ -131,4 +133,4 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**SonarCloud Dashboard:** https://sonarcloud.io/dashboard?id=${{ secrets.SONAR_PROJECT_KEY }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Webhook sent to n8n for automated retry if needed**" >> $GITHUB_STEP_SUMMARY
+          echo "**Webhook sent to n8n**" >> $GITHUB_STEP_SUMMARY
