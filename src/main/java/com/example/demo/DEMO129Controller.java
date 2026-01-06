@@ -2,92 +2,90 @@ package com.example.demo;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.stereotype.Service;
-import org.springframework.validation.annotation.Validated;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.*;
+
+import javax.validation.Valid;
 import javax.validation.constraints.Email;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.Size;
-import java.util.Optional;
+import java.util.HashMap;
+import java.util.Map;
 
 @SpringBootApplication
 public class DemoApplication {
+
     public static void main(String[] args) {
         SpringApplication.run(DemoApplication.class, args);
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 }
 
 @RestController
-@RequestMapping("/register")
+@RequestMapping("/api/register")
 class RegistrationController {
 
-    @Autowired
-    private UserService userService;
+    private final Map<String, String> registeredUsers = new HashMap<>();
+    private final PasswordEncoder passwordEncoder;
+
+    public RegistrationController(PasswordEncoder passwordEncoder) {
+        this.passwordEncoder = passwordEncoder;
+    }
 
     @PostMapping
-    public String registerUser(@Validated @RequestBody UserRegistrationRequest request) {
-        if (userService.emailExists(request.getEmail())) {
-            return "Error: Duplicate email registration";
+    public String registerUser(@Valid @RequestBody RegistrationRequest request) {
+        if (registeredUsers.containsKey(request.getEmail())) {
+            return "Error: Email already registered";
         }
-        if (!request.getPassword().equals(request.getConfirmPassword())) {
-            return "Error: Password mismatch";
+        if (!isValidEmail(request.getEmail())) {
+            return "Error: Invalid email address";
         }
-        userService.registerUser(request);
-        return "User account created. Confirmation email sent.";
-    }
-}
-
-@Service
-class UserService {
-
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private BCryptPasswordEncoder passwordEncoder;
-
-    public boolean emailExists(String email) {
-        return userRepository.findByEmail(email).isPresent();
-    }
-
-    public void registerUser(UserRegistrationRequest request) {
+        if (!isStrongPassword(request.getPassword())) {
+            return "Error: Weak password";
+        }
         String encryptedPassword = passwordEncoder.encode(request.getPassword());
-        User user = new User(request.getEmail(), encryptedPassword);
-        userRepository.save(user);
-        // Logic to send confirmation email
+        registeredUsers.put(request.getEmail(), encryptedPassword);
+        return "Registration successful. Confirmation message sent.";
+    }
+
+    private boolean isValidEmail(String email) {
+        return email.contains("@");
+    }
+
+    private boolean isStrongPassword(String password) {
+        return password.length() >= 8;
     }
 }
 
-interface UserRepository {
-    Optional<User> findByEmail(String email);
-    void save(User user);
-}
+class RegistrationRequest {
 
-class User {
-    private String email;
-    private String password;
-
-    public User(String email, String password) {
-        this.email = email;
-        this.password = password;
-    }
-
-    // Getters and setters
-}
-
-class UserRegistrationRequest {
-
-    @Email(message = "Invalid email address")
+    @Email(message = "Invalid email format")
     @NotBlank(message = "Email is mandatory")
     private String email;
 
-    @Size(min = 6, message = "Password must be at least 6 characters")
+    @Size(min = 8, message = "Password must be at least 8 characters long")
+    @NotBlank(message = "Password is mandatory")
     private String password;
 
-    @NotBlank(message = "Password confirmation is mandatory")
-    private String confirmPassword;
+    public String getEmail() {
+        return email;
+    }
 
-    // Getters and setters
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
 }
