@@ -5,11 +5,11 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpStatus;
-import javax.validation.Valid;
+import org.springframework.stereotype.Service;
+import org.springframework.validation.annotation.Validated;
 import javax.validation.constraints.Email;
 import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.Size;
 import java.util.Optional;
 
 @SpringBootApplication
@@ -20,85 +20,74 @@ public class DemoApplication {
 }
 
 @RestController
-@RequestMapping("/api/register")
+@RequestMapping("/register")
 class RegistrationController {
+
+    @Autowired
+    private UserService userService;
+
+    @PostMapping
+    public String registerUser(@Validated @RequestBody UserRegistrationRequest request) {
+        if (userService.emailExists(request.getEmail())) {
+            return "Error: Duplicate email registration";
+        }
+        if (!request.getPassword().equals(request.getConfirmPassword())) {
+            return "Error: Password mismatch";
+        }
+        userService.registerUser(request);
+        return "User account created. Confirmation email sent.";
+    }
+}
+
+@Service
+class UserService {
 
     @Autowired
     private UserRepository userRepository;
 
     @Autowired
-    private EmailService emailService;
-
-    @Autowired
     private BCryptPasswordEncoder passwordEncoder;
 
-    @PostMapping
-    public ResponseEntity<String> registerUser(@Valid @RequestBody UserRegistrationRequest request) {
-        if (!request.getPassword().equals(request.getConfirmPassword())) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Password mismatch");
-        }
+    public boolean emailExists(String email) {
+        return userRepository.findByEmail(email).isPresent();
+    }
 
-        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Email already in use");
-        }
-
-        User user = new User();
-        user.setEmail(request.getEmail());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
+    public void registerUser(UserRegistrationRequest request) {
+        String encryptedPassword = passwordEncoder.encode(request.getPassword());
+        User user = new User(request.getEmail(), encryptedPassword);
         userRepository.save(user);
-
-        emailService.sendConfirmationEmail(user.getEmail());
-
-        return ResponseEntity.ok("Registration successful");
+        // Logic to send confirmation email
     }
 }
 
+interface UserRepository {
+    Optional<User> findByEmail(String email);
+    void save(User user);
+}
+
+class User {
+    private String email;
+    private String password;
+
+    public User(String email, String password) {
+        this.email = email;
+        this.password = password;
+    }
+
+    // Getters and setters
+}
+
 class UserRegistrationRequest {
+
     @Email(message = "Invalid email address")
     @NotBlank(message = "Email is mandatory")
     private String email;
 
-    @NotBlank(message = "Password is mandatory")
+    @Size(min = 6, message = "Password must be at least 6 characters")
     private String password;
 
-    @NotBlank(message = "Confirm Password is mandatory")
+    @NotBlank(message = "Password confirmation is mandatory")
     private String confirmPassword;
 
-    // Getters and Setters
-}
-
-@Entity
-class User {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @Email
-    @NotBlank
-    private String email;
-
-    @NotBlank
-    private String password;
-
-    // Getters and Setters
-}
-
-interface UserRepository extends JpaRepository<User, Long> {
-    Optional<User> findByEmail(String email);
-}
-
-@Service
-class EmailService {
-    public void sendConfirmationEmail(String email) {
-        // Logic to send email
-    }
-}
-
-@Configuration
-class SecurityConfig {
-
-    @Bean
-    public BCryptPasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
+    // Getters and setters
 }
