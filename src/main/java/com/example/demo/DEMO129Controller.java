@@ -4,102 +4,112 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.stereotype.Service;
-import org.springframework.validation.annotation.Validated;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.SimpleMailMessage;
+
+import javax.validation.Valid;
 import javax.validation.constraints.Email;
 import javax.validation.constraints.NotBlank;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 
 @SpringBootApplication
 public class DemoApplication {
-
     public static void main(String[] args) {
         SpringApplication.run(DemoApplication.class, args);
     }
 }
 
 @RestController
-@RequestMapping("/register")
+@RequestMapping("/api/register")
 class RegistrationController {
 
     @Autowired
-    private UserService userService;
+    private UserRepository userRepository;
+
+    @Autowired
+    private BCryptPasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JavaMailSender mailSender;
 
     @PostMapping
-    public String registerUser(@Validated @RequestBody UserRegistrationRequest request) {
+    public ResponseEntity<String> registerUser(@Valid @RequestBody UserRegistrationRequest request) {
         if (!request.getPassword().equals(request.getConfirmPassword())) {
-            return "Error: Passwords do not match.";
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Password mismatch error");
         }
 
-        Optional<User> existingUser = userService.findByEmail(request.getEmail());
-        if (existingUser.isPresent()) {
-            return "Error: Email is already registered.";
+        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Email already registered");
         }
 
-        userService.registerUser(request);
-        return "Registration successful!";
-    }
-}
+        User user = new User();
+        user.setEmail(request.getEmail());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        userRepository.save(user);
 
-@Service
-class UserService {
+        sendConfirmationEmail(user.getEmail());
 
-    private final Map<String, User> userDatabase = new HashMap<>();
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
-
-    public Optional<User> findByEmail(String email) {
-        return Optional.ofNullable(userDatabase.get(email));
+        return ResponseEntity.ok("User registered successfully");
     }
 
-    public void registerUser(UserRegistrationRequest request) {
-        String encryptedPassword = passwordEncoder.encode(request.getPassword());
-        User user = new User(request.getEmail(), encryptedPassword);
-        userDatabase.put(user.getEmail(), user);
-    }
-}
-
-class User {
-
-    private String email;
-    private String password;
-
-    public User(String email, String password) {
-        this.email = email;
-        this.password = password;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public String getPassword() {
-        return password;
+    private void sendConfirmationEmail(String email) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(email);
+        message.setSubject("Registration Confirmation");
+        message.setText("Thank you for registering!");
+        mailSender.send(message);
     }
 }
 
 class UserRegistrationRequest {
-
-    @Email(message = "Invalid email address")
+    @Email(message = "Invalid email format")
+    @NotBlank(message = "Email is mandatory")
     private String email;
 
-    @NotBlank(message = "Password cannot be blank")
+    @NotBlank(message = "Password is mandatory")
     private String password;
 
-    @NotBlank(message = "Confirm password cannot be blank")
+    @NotBlank(message = "Confirm password is mandatory")
     private String confirmPassword;
 
-    public String getEmail() {
-        return email;
-    }
+    // Getters and Setters
+}
 
-    public String getPassword() {
-        return password;
-    }
+@Entity
+class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-    public String getConfirmPassword() {
-        return confirmPassword;
+    @Email
+    @NotBlank
+    private String email;
+
+    @NotBlank
+    private String password;
+
+    // Getters and Setters
+}
+
+interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByEmail(String email);
+}
+
+@Configuration
+class SecurityConfig {
+    @Bean
+    public BCryptPasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+}
+
+@Configuration
+class MailConfig {
+    @Bean
+    public JavaMailSender javaMailSender() {
+        return new JavaMailSenderImpl();
     }
 }
