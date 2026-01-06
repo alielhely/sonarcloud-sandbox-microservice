@@ -89,9 +89,17 @@ jobs:
       - name: Send Webhook to n8n
         if: always()
         run: |
-          BUILD_ERRORS=$(cat build_errors.txt | head -c 2000)
-          SONAR_ISSUES=$(cat sonar_issues.txt | head -c 2000)
-          ISSUE_KEY=$(git log -1 --pretty=%B | grep -oP '\[([A-Z]+-[0-9]+)\]' | tr -d '[]' || echo "DEMO-129")
+          BUILD_ERRORS=$(cat build_errors.txt 2>/dev/null | head -c 2000 || echo "No build errors")
+          SONAR_ISSUES=$(cat sonar_issues.txt 2>/dev/null | head -c 2000 || echo "No sonar issues")
+          
+          # Extract issue key from commit message - FIXED
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          ISSUE_KEY=$(echo "$COMMIT_MSG" | grep -oE '\[[A-Z]+-[0-9]+\]' | head -1 | tr -d '[]')
+          if [ -z "$ISSUE_KEY" ]; then
+            ISSUE_KEY="DEMO-129"
+          fi
+          
+          echo "Extracted Issue Key: $ISSUE_KEY"
           
           curl -X POST "${{ secrets.N8N_WEBHOOK_URL }}" \
             -H "Content-Type: application/json" \
