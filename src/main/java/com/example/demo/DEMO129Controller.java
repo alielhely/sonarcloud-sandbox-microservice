@@ -3,12 +3,12 @@ package com.example.demo;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.stereotype.Service;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.validation.BindingResult;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpStatus;
 
 import javax.validation.constraints.Email;
 import javax.validation.constraints.NotBlank;
@@ -24,62 +24,69 @@ public class DemoApplication {
 }
 
 @RestController
-@RequestMapping("/register")
+@RequestMapping("/api/register")
+@Validated
 class RegistrationController {
 
     @Autowired
-    private UserService userService;
+    private JavaMailSender mailSender;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    private BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @PostMapping
-    public ResponseEntity<String> registerUser(@RequestBody UserRegistrationRequest request) {
-        if (!isValidEmail(request.getEmail())) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid email format.");
+    public Map<String, String> registerUser(@RequestBody @Validated UserRegistrationRequest request, BindingResult result) {
+        Map<String, String> response = new HashMap<>();
+
+        if (result.hasErrors()) {
+            response.put("message", "Validation failed");
+            return response;
         }
-        if (!isValidPassword(request.getPassword())) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Password is too weak.");
+
+        if (!request.getPassword().equals(request.getConfirmPassword())) {
+            response.put("message", "Password mismatch");
+            return response;
         }
-        if (userService.isEmailRegistered(request.getEmail())) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Email is already registered.");
+
+        if (userRepository.existsByEmail(request.getEmail())) {
+            response.put("message", "Email already in use");
+            return response;
         }
-        userService.registerUser(request);
-        return ResponseEntity.ok("Registration successful.");
+
+        String encryptedPassword = passwordEncoder.encode(request.getPassword());
+        User user = new User(request.getEmail(), encryptedPassword);
+        userRepository.save(user);
+
+        sendConfirmationEmail(request.getEmail());
+
+        response.put("message", "User registered successfully");
+        return response;
     }
 
-    private boolean isValidEmail(String email) {
-        return email != null && email.contains("@");
-    }
-
-    private boolean isValidPassword(String password) {
-        return password != null && password.length() >= 8;
-    }
-}
-
-@Service
-class UserService {
-
-    private final Map<String, String> userDatabase = new HashMap<>();
-    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
-
-    public void registerUser(UserRegistrationRequest request) {
-        String encodedPassword = passwordEncoder.encode(request.getPassword());
-        userDatabase.put(request.getEmail(), encodedPassword);
-    }
-
-    public boolean isEmailRegistered(String email) {
-        return userDatabase.containsKey(email);
+    private void sendConfirmationEmail(String email) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(email);
+        message.setSubject("Registration Confirmation");
+        message.setText("Thank you for registering. Please confirm your email address.");
+        mailSender.send(message);
     }
 }
 
 class UserRegistrationRequest {
-
-    @Email
     @NotBlank
+    @Email
     private String email;
 
     @NotBlank
-    @Size(min = 8)
+    @Size(min = 6)
     private String password;
 
+    @NotBlank
+    private String confirmPassword;
+
+    // Getters and Setters
     public String getEmail() {
         return email;
     }
@@ -95,4 +102,50 @@ class UserRegistrationRequest {
     public void setPassword(String password) {
         this.password = password;
     }
+
+    public String getConfirmPassword() {
+        return confirmPassword;
+    }
+
+    public void setConfirmPassword(String confirmPassword) {
+        this.confirmPassword = confirmPassword;
+    }
+}
+
+@Entity
+class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Email
+    @NotBlank
+    private String email;
+
+    @NotBlank
+    private String password;
+
+    // Constructors, Getters, and Setters
+    public User() {}
+
+    public User(String email, String password) {
+        this.email = email;
+        this.password = password;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+}
+
+interface UserRepository extends JpaRepository<User, Long> {
+    boolean existsByEmail(String email);
 }
