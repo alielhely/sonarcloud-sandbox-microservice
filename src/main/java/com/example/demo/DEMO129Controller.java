@@ -5,13 +5,13 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpStatus;
 
 import javax.validation.Valid;
 import javax.validation.constraints.Email;
 import javax.validation.constraints.NotBlank;
-import java.util.Optional;
+import javax.validation.constraints.Size;
+import java.util.HashMap;
+import java.util.Map;
 
 @SpringBootApplication
 public class DemoApplication {
@@ -25,27 +25,30 @@ public class DemoApplication {
 class RegistrationController {
 
     @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private BCryptPasswordEncoder passwordEncoder;
+    private UserService userService;
 
     @PostMapping
-    public ResponseEntity<String> registerUser(@Valid @RequestBody UserRegistrationRequest request) {
-        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Email already registered");
-        }
-        
+    public Map<String, String> registerUser(@Valid @RequestBody UserRegistrationRequest request) {
+        Map<String, String> response = new HashMap<>();
+
         if (!request.getPassword().equals(request.getConfirmPassword())) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Password mismatch");
+            response.put("message", "Password mismatch");
+            return response;
         }
 
-        User user = new User();
-        user.setEmail(request.getEmail());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
-        userRepository.save(user);
+        if (userService.isEmailRegistered(request.getEmail())) {
+            response.put("message", "Email already registered");
+            return response;
+        }
 
-        return ResponseEntity.ok("Registration successful");
+        if (!userService.isPasswordStrong(request.getPassword())) {
+            response.put("message", "Weak password");
+            return response;
+        }
+
+        userService.registerUser(request);
+        response.put("message", "Registration successful");
+        return response;
     }
 }
 
@@ -54,7 +57,7 @@ class UserRegistrationRequest {
     @NotBlank(message = "Email is mandatory")
     private String email;
 
-    @NotBlank(message = "Password is mandatory")
+    @Size(min = 8, message = "Password must be at least 8 characters")
     private String password;
 
     @NotBlank(message = "Confirm password is mandatory")
@@ -63,31 +66,22 @@ class UserRegistrationRequest {
     // Getters and Setters
 }
 
-@Entity
-class User {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+@Service
+class UserService {
 
-    @Email
-    @NotBlank
-    private String email;
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final Map<String, String> userDatabase = new HashMap<>();
 
-    @NotBlank
-    private String password;
+    public boolean isEmailRegistered(String email) {
+        return userDatabase.containsKey(email);
+    }
 
-    // Getters and Setters
-}
+    public boolean isPasswordStrong(String password) {
+        return password.length() >= 8; // Simplified strength check
+    }
 
-interface UserRepository extends JpaRepository<User, Long> {
-    Optional<User> findByEmail(String email);
-}
-
-@Configuration
-class SecurityConfig {
-
-    @Bean
-    public BCryptPasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+    public void registerUser(UserRegistrationRequest request) {
+        String encryptedPassword = passwordEncoder.encode(request.getPassword());
+        userDatabase.put(request.getEmail(), encryptedPassword);
     }
 }
