@@ -3,16 +3,18 @@ package com.example.demo;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.validation.BindingResult;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 
-import javax.validation.Valid;
 import javax.validation.constraints.Email;
 import javax.validation.constraints.NotBlank;
-import java.util.Optional;
+import javax.validation.constraints.Size;
+import java.util.HashMap;
+import java.util.Map;
 
 @SpringBootApplication
 public class DemoApplication {
@@ -22,75 +24,75 @@ public class DemoApplication {
 }
 
 @RestController
-@RequestMapping("/api/register")
-@Validated
+@RequestMapping("/register")
 class RegistrationController {
 
     @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private EmailService emailService;
-
-    @Autowired
-    private BCryptPasswordEncoder passwordEncoder;
+    private UserService userService;
 
     @PostMapping
-    public ResponseEntity<String> registerUser(@Valid @RequestBody UserRegistrationRequest request, BindingResult result) {
-        if (result.hasErrors()) {
-            return ResponseEntity.badRequest().body("Invalid email address");
+    public ResponseEntity<String> registerUser(@RequestBody UserRegistrationRequest request) {
+        if (!isValidEmail(request.getEmail())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid email format.");
         }
-
-        if (!request.getPassword().equals(request.getConfirmPassword())) {
-            return ResponseEntity.badRequest().body("Passwords do not match");
+        if (!isValidPassword(request.getPassword())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Password is too weak.");
         }
-
-        Optional<User> existingUser = userRepository.findByEmail(request.getEmail());
-        if (existingUser.isPresent()) {
-            return ResponseEntity.badRequest().body("Email is already in use");
+        if (userService.isEmailRegistered(request.getEmail())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Email is already registered.");
         }
+        userService.registerUser(request);
+        return ResponseEntity.ok("Registration successful.");
+    }
 
-        String encryptedPassword = passwordEncoder.encode(request.getPassword());
-        User user = new User(request.getEmail(), encryptedPassword);
-        userRepository.save(user);
+    private boolean isValidEmail(String email) {
+        return email != null && email.contains("@");
+    }
 
-        emailService.sendConfirmationEmail(user.getEmail());
+    private boolean isValidPassword(String password) {
+        return password != null && password.length() >= 8;
+    }
+}
 
-        return ResponseEntity.ok("User account created");
+@Service
+class UserService {
+
+    private final Map<String, String> userDatabase = new HashMap<>();
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    public void registerUser(UserRegistrationRequest request) {
+        String encodedPassword = passwordEncoder.encode(request.getPassword());
+        userDatabase.put(request.getEmail(), encodedPassword);
+    }
+
+    public boolean isEmailRegistered(String email) {
+        return userDatabase.containsKey(email);
     }
 }
 
 class UserRegistrationRequest {
+
     @Email
     @NotBlank
     private String email;
 
     @NotBlank
+    @Size(min = 8)
     private String password;
 
-    @NotBlank
-    private String confirmPassword;
-
-    // Getters and Setters
-}
-
-interface UserRepository {
-    Optional<User> findByEmail(String email);
-    void save(User user);
-}
-
-class User {
-    private String email;
-    private String password;
-
-    public User(String email, String password) {
-        this.email = email;
-        this.password = password;
+    public String getEmail() {
+        return email;
     }
 
-    // Getters and Setters
-}
+    public void setEmail(String email) {
+        this.email = email;
+    }
 
-interface EmailService {
-    void sendConfirmationEmail(String email);
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
 }
