@@ -14,7 +14,6 @@ public class DemoApplication {
 
 @RestController
 class DemoController {
-
     private static final String LOGIN_PATH = "/login";
     private static final String LOGIN_VIEW = "login";
 
