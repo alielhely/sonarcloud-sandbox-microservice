@@ -1,6 +1,6 @@
 # Implement Feature: SCRUM-7
 
-> **Generated:** 2026-03-23T08:58:48.200Z
+> **Generated:** 2026-03-23T12:21:42.843Z
 > **Status:** Ready for Development
 
 ---
@@ -27,23 +27,11 @@
 Feature: View Upcoming Ride Booking Details
 
   Scenario: Rider views details of their upcoming ride
-    Given the rider has an upcoming ride booking
-    When the rider navigates to the "My Rides" section in the app
-    And selects the upcoming ride
+    Given the rider has an upcoming ride booked
+    When the rider navigates to the "Upcoming Rides" section in the app
     Then the rider should see the driver's information
-    And the pickup location
-    And the estimated time of arrival (ETA) for the ride
-
-  Scenario: Rider does not have any upcoming rides
-    Given the rider has no upcoming ride bookings
-    When the rider navigates to the "My Rides" section in the app
-    Then the rider should see a message indicating there are no upcoming rides
-
-  Scenario: Rider receives updated ETA for the ride
-    Given the rider has an upcoming ride booking
-    And the ETA for the ride has been updated
-    When the rider views the details of the upcoming ride
-    Then the rider should see the updated estimated time of arrival (ETA)
+    And the rider should see the pickup location
+    And the rider should see the estimated time of arrival (ETA) for the ride
 ```
 
 ---
