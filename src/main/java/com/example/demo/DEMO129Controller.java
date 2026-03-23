@@ -14,12 +14,11 @@ public class DemoApplication {
 
 @RestController
 class DemoController {
+    private static final String LOGIN_ENDPOINT = "/login";
+    private static final String LOGIN_MESSAGE = "login";
 
-    private static final String LOGIN_PATH = "/login";
-    private static final String LOGIN_VIEW = "login";
-
-    @GetMapping(LOGIN_PATH)
+    @GetMapping(LOGIN_ENDPOINT)
     public String login() {
-        return LOGIN_VIEW;
+        return LOGIN_MESSAGE;
     }
 }
