@@ -19,6 +19,11 @@ class DemoController {
     private static final String LOGIN_PATH = "/login";
     private static final String LOGIN_VIEW = "login";
 
+    @GetMapping("/")
+    public String home() {
+        return "Welcome to the Demo Application!";
+    }
+
     @GetMapping(LOGIN_PATH)
     public String login() {
         return LOGIN_VIEW;
