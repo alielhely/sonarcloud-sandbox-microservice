@@ -1,6 +1,6 @@
 # Implement Feature: SCRUM-7
 
-> **Generated:** 2026-03-23T12:21:42.843Z
+> **Generated:** 2026-03-23T12:28:09.806Z
 > **Status:** Ready for Development
 
 ---
@@ -15,6 +15,7 @@
 *I want* to view the details of my upcoming ride (driver info, pickup location, ETA)
 
 *So that* I can know when and where I will be picked up.
+*So that* I can know when and where I will be picked up.
 
 **Acceptance Criteria:**
 - See description for acceptance criteria
@@ -26,12 +27,12 @@
 ```gherkin
 Feature: View Upcoming Ride Booking Details
 
-  Scenario: Rider views details of their upcoming ride
-    Given the rider has an upcoming ride booked
-    When the rider navigates to the "Upcoming Rides" section in the app
+  Scenario: Rider views upcoming ride details
+    Given a rider has an upcoming ride booking
+    When the rider accesses the ride details page
     Then the rider should see the driver's information
     And the rider should see the pickup location
-    And the rider should see the estimated time of arrival (ETA) for the ride
+    And the rider should see the estimated time of arrival (ETA)
 ```
 
 ---
