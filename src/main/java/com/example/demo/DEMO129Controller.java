@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @SpringBootApplication
 public class DemoApplication {
-
     public static void main(String[] args) {
         SpringApplication.run(DemoApplication.class, args);
     }
@@ -16,10 +15,15 @@ public class DemoApplication {
 @RestController
 class DemoController {
 
-    private static final String LOGIN_ENDPOINT = "/login";
+    private static final String LOGIN_PATH = "/login";
     private static final String LOGIN_VIEW = "login";
 
-    @GetMapping(LOGIN_ENDPOINT)
+    @GetMapping("/")
+    public String home() {
+        return "Welcome to the Demo Application!";
+    }
+
+    @GetMapping(LOGIN_PATH)
     public String login() {
         return LOGIN_VIEW;
     }
