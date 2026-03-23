@@ -16,11 +16,8 @@ public class DemoApplication {
 @RestController
 class DemoController {
 
-    private static final String LOGIN_ENDPOINT = "/login";
-    private static final String LOGIN_VIEW = "login";
-
-    @GetMapping(LOGIN_ENDPOINT)
-    public String login() {
-        return LOGIN_VIEW;
+    @GetMapping("/hello")
+    public String hello() {
+        return "Hello, World!";
     }
 }
