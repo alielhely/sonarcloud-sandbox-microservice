@@ -16,10 +16,10 @@ public class DemoApplication {
 class DemoController {
 
     private static final String LOGIN_PATH = "/login";
-    private static final String LOGIN_VIEW = "login";
+    private static final String LOGIN = "login";
 
     @GetMapping(LOGIN_PATH)
     public String login() {
-        return LOGIN_VIEW;
+        return LOGIN;
     }
 }
